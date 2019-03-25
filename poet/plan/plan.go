@@ -37,3 +37,5 @@ func (q *Query) ExecuteQuery(cur PCursor, bindvars map[string]*querypb.BindVaria
 }
 
 var _ Primitive = (*Query)(nil)
+
+
