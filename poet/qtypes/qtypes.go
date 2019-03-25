@@ -30,6 +30,7 @@ import "errors"
 
 var (
 	E_Type_Mismatch = errors.New("type mismatch")
+	E_Illegal_Value = errors.New("illegal value")
 )
 
 const (
@@ -80,26 +81,49 @@ func TypeSize(t querypb.Type) (bitSize, typ int) {
 }
 
 func ValueInt(v querypb.Value) (int64,error) {
-	if !sqltypes.IsSigned(v.Type) { return nil,E_Type_Mismatch }
+	if !sqltypes.IsSigned(v.Type) { return 0,E_Type_Mismatch }
 	return strconv.ParseInt(string(v.Value), 10, 64 )
 }
 func ValueInt32(v querypb.Value) (int32,error) {
-	if !sqltypes.IsSigned(v.Type) { return nil,E_Type_Mismatch }
+	if !sqltypes.IsSigned(v.Type) { return 0,E_Type_Mismatch }
 	i,e := strconv.ParseInt(string(v.Value), 10, 32 )
 	return int32(i),e
 }
 func ValueUint(v querypb.Value) (uint64,error) {
-	if !sqltypes.IsUnsigned(v.Type) { return nil,E_Type_Mismatch }
+	if !sqltypes.IsUnsigned(v.Type) { return 0,E_Type_Mismatch }
 	return strconv.ParseUint(string(v.Value), 10, 64 )
 }
 func ValueFloat(v querypb.Value) (float64,error) {
-	if !sqltypes.IsUnsigned(v.Type) { return nil,E_Type_Mismatch }
+	if !sqltypes.IsFloat(v.Type) { return 0,E_Type_Mismatch }
 	return strconv.ParseFloat(string(v.Value), 64 )
 }
 func ValueFloat32(v querypb.Value) (float32,error) {
-	if !sqltypes.IsUnsigned(v.Type) { return nil,E_Type_Mismatch }
+	if !sqltypes.IsFloat(v.Type) { return 0,E_Type_Mismatch }
 	f,e := strconv.ParseFloat(string(v.Value), 64 )
 	return float32(f),e
 }
-
+func NewBool(b bool) sqltypes.Value {
+	m := []byte{'0'}
+	if b { m[0] = '1' }
+	return sqltypes.MakeTrusted(sqltypes.Bit,m)
+}
+func ValueBool(v querypb.Value) (bool,error) {
+	if v.Type==sqltypes.Bit {
+		switch string(v.Value) {
+		case "","0": return false,nil
+		case "1": return true,nil
+		}
+		return v.Value[0]!='0',nil
+	}
+	if sqltypes.IsSigned(v.Type) {
+		s,e := strconv.ParseInt(string(v.Value), 10, 64 )
+		return s!=0,e
+	}
+	if sqltypes.IsUnsigned(v.Type) {
+		u,e := strconv.ParseUint(string(v.Value), 10, 64 )
+		return u!=0,e
+	}
+	
+	return false,E_Type_Mismatch
+}
 
