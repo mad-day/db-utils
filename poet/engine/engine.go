@@ -21,23 +21,38 @@ SOFTWARE.
 */
 
 
-package plan
+package engine
 
-import "github.com/xwb1989/sqlparser/dependency/querypb"
-import "github.com/mad-day/db-utils/poet/qtypes"
-
-type InstID interface{
-	IsInstID()
+import (
+	"github.com/xwb1989/sqlparser"
+	"github.com/xwb1989/sqlparser/dependency/querypb"
+	"github.com/mad-day/db-utils/poet/qtypes"
+)
+type PDest interface{
 }
 
-type DefInstID struct{}
-func (*DefInstID) IsInstID() {}
-
-type PCursor interface {
-	ExecuteQuery(inst InstID, query string, bindvars map[string]*querypb.BindVariable,callback func(res *qtypes.Result) error) error
+type Column struct {
+	Type querypb.Type
+	Name string
+	Expr sqlparser.Expr
 }
 
-type Primitive interface {
-	ExecuteQuery(cur PCursor, bindvars map[string]*querypb.BindVariable,callback func(res *qtypes.Result) error) error
+type Table struct {
+	Dest PDest
+	// Table name in target
+	Name sqlparser.TableName
+	Columns []Column
+}
+
+type PSchema interface{
+	FindTable(n sqlparser.TableName) (*Table,error)
+}
+
+type PSession interface{
+	
+}
+
+type Primitive interface{
+	Execute(sess PSession, bvs map[string]*querypb.BindVariable, cb func(r *qtypes.Result) error) error
 }
 

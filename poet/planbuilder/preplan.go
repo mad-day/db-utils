@@ -21,21 +21,30 @@ SOFTWARE.
 */
 
 
-package plan
+package planbuilder
 
-import "github.com/xwb1989/sqlparser/dependency/querypb"
-import "github.com/mad-day/db-utils/poet/qtypes"
+import (
+	"github.com/xwb1989/sqlparser"
+	"github.com/mad-day/db-utils/poet/engine"
+)
 
-type Query struct {
-	DBInst InstID
+type preNode interface{
+	iNode()
+}
+type preColumns interface{
+	preNode
+	iCols() []column
+}
+
+type tablesExpr struct {
+	cols   []column
+	tables []*engine.Table
 	
-	Query string
+	// sqlparser.TableExprs, sqlparser.TableExpr or sqlparser.SimpleTableExpr
+	sql    sqlparser.SQLNode
+	single bool
+	dest   engine.PDest
 }
-
-func (q *Query) ExecuteQuery(cur PCursor, bindvars map[string]*querypb.BindVariable,callback func(res *qtypes.Result) error) error {
-	return cur.ExecuteQuery(q.DBInst,q.Query,bindvars,callback)
-}
-
-var _ Primitive = (*Query)(nil)
-
+func (*tablesExpr) iNode() {}
+func (t *tablesExpr) iCols() []column { return t.cols }
 
