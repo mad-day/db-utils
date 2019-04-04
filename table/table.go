@@ -25,6 +25,14 @@ package table
 
 import "fmt"
 
+func toString(i interface{}) string {
+	switch i.(type){
+	case []byte: return fmt.Sprintf("B%q",i)
+	case string: return fmt.Sprintf("%q",i)
+	}
+	return fmt.Sprint(i)
+}
+
 type ColumnFilter struct {
 	Index int
 	Operator string
@@ -40,6 +48,12 @@ func (c *ColumnFilter) Err(code ErrCode,cols []string) (se ScanError) {
 		se.FieldString = cols[c.Index]
 	}
 	return
+}
+func (c ColumnFilter) String() string {
+	if c.Escape == nil {
+		return fmt.Sprintf("{$%d %s %s}",c.Index,c.Operator,toString(c.Value))
+	}
+	return fmt.Sprintf("{$%d %s %s escape %s}",c.Index,c.Operator,toString(c.Value),toString(c.Escape))
 }
 
 type ColumnOrder struct {
@@ -63,6 +77,11 @@ func (c *ColumnOrder) Err(code ErrCode,cols []string) (se ScanError) {
 	}
 	return
 }
+func (c ColumnOrder) String() string {
+	s := "asc"
+	if c.Desc { s = "desc" }
+	return fmt.Sprintf("$%d %s",c.Index,s)
+}
 
 type TableScan struct {
 	Filter []ColumnFilter
@@ -72,11 +91,11 @@ type TableScan struct {
 /*
 This interface represents a Scannable Table.
 
-	var tab Table
+	var tab table.Table
 	cols := []int{0,1,2,3}
 	vals := make([]interface{},4)
 	
-	iter,_ := TableScan(cols,new(TableScan))
+	iter,_ := tab.TableScan(cols,new(table.TableScan))
 	defer iter.Close()
 	for {
 		err := iter.Next(cols,vals)
@@ -103,6 +122,19 @@ type TableIterator interface {
 	// and any other error if there is a true error.
 	Next(cols []int,vals []interface{}) error
 }
+
+type TableOp int
+const (
+	// Insert Job
+	T_Insert TableOp = iota
+	T_InsertIgnore
+	T_Replace
+	
+	// Update/Delete Job
+	T_Update
+	T_Delete
+)
+
 
 type ErrCode int
 const (
