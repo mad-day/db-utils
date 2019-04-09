@@ -117,7 +117,7 @@ func (t *tableM) TableUpdate(tu *table.TableUpdate) error {
 			for i := range t.buf {
 				t.buf[i] = util.GetPtr(t.rec[i+1])
 			}
-			val,err = msgpackx.Marshal(t.buf)
+			val,err = msgpackx.Marshal(t.buf...)
 			if err!=nil { return err }
 			p.op = bolt.VisitOpSET(val)
 			err = t.cur.Accept(p,true)
@@ -156,7 +156,7 @@ func (t *tableC) encode() ([]byte,error) {
 	for i := range t.buf {
 		t.buf[i] = util.GetPtr(t.rec[i+1])
 	}
-	return msgpackx.Marshal(t.buf)
+	return msgpackx.Marshal(t.buf...)
 }
 func (t *tableC) errOp(err error) (op bolt.VisitOp) {
 	t.err = err
