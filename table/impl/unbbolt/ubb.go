@@ -78,6 +78,47 @@ func (t *tableI) Next(cols []int,vals []interface{}) error {
 	}
 	return nil
 }
+func (ti *tableI) tableScan0(fields []string,cols []int,meta *table.TableScan) (*int,error) {
+	var op string
+	var key []byte
+	for i := range meta.Order {
+		if meta.Order[i].Index != 0 { return nil,meta.Order[i].Err(table.E_ORDERBY_ORDER_FIELD,fields) }
+		if meta.Order[i].Desc { return nil,meta.Order[i].Err(table.E_ORDERBY_ORDER,fields) }
+	}
+	foundFilter := false
+	for i := range meta.Filter {
+		if meta.Filter[i].Index != 0 { return nil,meta.Filter[i].Err(table.E_FILTER_FIELD_UNSUPP,fields) }
+		
+		switch meta.Filter[i].Operator {
+		case "=","<=>","<","<=",">",">=":
+			switch v := meta.Filter[i].Value.(type) {
+				case []byte: key = v
+				case string: key = []byte(v)
+			}
+			op = meta.Filter[i].Operator
+			switch op {
+			case "=","<=>":
+				ti.end = key
+				ti.incl = true
+				ti.key,ti.val = ti.cur.Seek(key)
+				ti.pick = true
+			case ">",">=":
+				ti.key,ti.val = ti.cur.Seek(key)
+				ti.pick = op==">="
+			case "<","<=":
+				ti.end = key
+				ti.incl = op=="<="
+			}
+			foundFilter = true
+		default: return nil,meta.Filter[i].Err(table.E_FILTER_OPERATOR_UNSUPP,fields)
+		}
+	}
+	if !foundFilter {
+		ti.key,ti.val = ti.cur.First()
+		ti.pick = true
+	}
+	return nil,nil
+}
 
 type placer struct {
 	bolt.VisitorDefault
@@ -101,6 +142,8 @@ func (t *tableM) Abort() error {
 	return err
 }
 func (t *tableM) TableUpdate(tu *table.TableUpdate) (*table.ModifyResult,error) {
+	if _,err := t.tableScan0(nil,nil,tu.Scan); err!=nil { return nil,err }
+	
 	p := new(placer)
 	var cnt int64
 	switch tu.Op {
@@ -299,7 +342,8 @@ func (db *DBTable) TableScan(cols []int,meta *table.TableScan) (table.TableItera
 	if err!=nil { return nil,err }
 	defer ti.discard()
 	ti.active = false
-	_,err = db.tableScan(ti,cols,meta)
+	//_,err = db.tableScan(ti,cols,meta)
+	_,err = ti.tableScan0(db.Fields,cols,meta)
 	if err!=nil { return nil,err }
 	ti.active = true
 	return ti,nil
@@ -308,16 +352,17 @@ func (db *DBTable) TablePrepareUpdate(tu *table.TableUpdate) (table.TableUpdateS
 	for _,j := range tu.UpdCols { if j==0 { return nil,fmt.Errorf("Trying to update the primary key") } }
 	ti,err := db.modify()
 	if err!=nil { return nil,err }
-	defer ti.discard()
-	ti.active = false
-	_,err = db.tableScan(&(ti.tableI),nil,tu.Scan)
-	if err!=nil { return nil,err }
-	ti.active = true
+	//defer ti.discard()
+	//ti.active = false
+	//_,err = db.tableScan(&(ti.tableI),nil,tu.Scan)
+	//if err!=nil { return nil,err }
+	//ti.active = true
 	return ti,nil
 }
 
 func (db *DBTable) tableScan(ti *tableI,cols []int,meta *table.TableScan) (*int,error) {
-	
+	return ti.tableScan0(db.Fields,cols,meta)
+	/*
 	var op string
 	var key []byte
 	for i := range meta.Order {
@@ -357,6 +402,7 @@ func (db *DBTable) tableScan(ti *tableI,cols []int,meta *table.TableScan) (*int,
 		ti.pick = true
 	}
 	return nil,nil
+	*/
 }
 
 func (db *DBTable) TablePrepareInsert(ti *table.TableInsert) (table.TableInsertStmt,error) {
