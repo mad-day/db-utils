@@ -73,12 +73,35 @@ func (sm SetterMap) useph(i *interface{}) {
 // If you know what you are doing!
 func (sm SetterMap) Dangerous_Inspect(i *interface{}) { sm.useph(i) }
 
-func FindPlaceHolders(scan *table.TableScan) SetterMap {
-	sm := make(SetterMap)
+func (sm SetterMap) InspectTableScan(scan *table.TableScan) {
 	for i := range scan.Filter {
 		sm.useph(&(scan.Filter[i].Value))
 		sm.useph(&(scan.Filter[i].Escape))
 	}
+}
+
+func (sm SetterMap) InspectTuple(tuple []interface{}) {
+	for i := range tuple {
+		sm.useph(&(tuple[i]))
+	}
+}
+func (sm SetterMap) InspectTuples(tuples [][]interface{}) {
+	for _,tuple := range tuples {
+		sm.InspectTuple(tuple)
+	}
+}
+
+
+/*
+This function is defined as:
+
+	sm := make(SetterMap)
+	sm.InspectTableScan(scan)
+	return sm
+*/
+func FindPlaceHolders(scan *table.TableScan) SetterMap {
+	sm := make(SetterMap)
+	sm.InspectTableScan(scan)
 	return sm
 }
 

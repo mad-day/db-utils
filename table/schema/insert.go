@@ -121,3 +121,4 @@ func (s *Schema) CompileInsert(dml *sqlparser.Insert) (job *InsertJob,err error)
 	job.OndupVals = c.ondup_vals
 	return
 }
+
