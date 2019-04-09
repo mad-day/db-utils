@@ -134,6 +134,8 @@ type TableInsert struct {
 	OndupVals []interface{}
 }
 type TableInsertStmt interface {
+	Close() error
+	
 	TableInsert(ti *TableInsert) error
 }
 
@@ -152,6 +154,8 @@ type TableUpdate struct {
 }
 
 type TableUpdateStmt interface {
+	Close() error
+	
 	TableUpdate(tu *TableUpdate) error
 }
 
