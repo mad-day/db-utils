@@ -401,6 +401,7 @@ func (c *compiler) compileDel(s *sqlparser.Delete) {
 type UpdateDeleteJob struct{
 	Tab table.Table
 	Op  table.TableOp
+	Scan *table.TableScan
 	
 	UpdCols []int
 	UpdVals []interface{}
@@ -416,6 +417,7 @@ func (s *Schema) CompileUpdate(dml *sqlparser.Update) (job *UpdateDeleteJob,err 
 	job.Op = c.op
 	job.UpdCols = c.updCols
 	job.UpdVals = c.updVals
+	job.Scan = c.scan
 	return
 }
 func (s *Schema) CompileDelete(dml *sqlparser.Delete) (job *UpdateDeleteJob,err error) {
@@ -429,5 +431,6 @@ func (s *Schema) CompileDelete(dml *sqlparser.Delete) (job *UpdateDeleteJob,err 
 	job.Op = c.op
 	job.UpdCols = c.updCols
 	job.UpdVals = c.updVals
+	job.Scan = c.scan
 	return
 }
