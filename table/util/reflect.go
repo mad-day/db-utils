@@ -29,6 +29,15 @@ import (
 	"time"
 )
 
+func GetKey(dest interface{}) ([]byte,error){
+	switch v := dest.(type) {
+	case *string: return []byte(*v),nil
+	case *[]byte: return *v,nil
+	default: return nil,fmt.Errorf("Invalid assignment %T <- []byte",dest)
+	}
+	panic("unreachable")
+}
+
 func SetInKey(dest interface{}, val []byte) error{
 	switch v := dest.(type) {
 	case *string: *v = string(val)

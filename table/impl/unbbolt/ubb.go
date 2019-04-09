@@ -69,13 +69,160 @@ func (t *tableI) next() (key,val []byte,err error) {
 func (t *tableI) Next(cols []int,vals []interface{}) error {
 	key,val,err := t.next()
 	if err!=nil { return err }
-	t.rec[0] = key
+	//t.rec[0] = key
+	util.SetInKey(t.rec[0],key)
 	err = msgpackx.Unmarshal(val,t.rec[1:]...)
 	if err!=nil { return err }
 	for i,j := range cols {
 		vals[i] = util.GetPtr(t.rec[j])
 	}
 	return nil
+}
+
+type placer struct {
+	bolt.VisitorDefault
+	op bolt.VisitOp
+}
+func (p *placer) VisitFull(key, value []byte) bolt.VisitOp { return p.op }
+func (p *placer) VisitEmpty(key []byte) bolt.VisitOp { return p.op }
+
+type tableM struct {
+	tableI
+	buf []interface{}
+}
+func (t *tableM) Close() error {
+	err := t.tx.Commit()
+	t.tx = nil
+	return err
+}
+func (t *tableM) Abort() error {
+	err := t.tx.Rollback()
+	t.tx = nil
+	return err
+}
+func (t *tableM) TableUpdate(tu *table.TableUpdate) error {
+	p := new(placer)
+	switch tu.Op {
+	case table.T_Update:
+		for {
+			_,val,err := t.next()
+			if err==io.EOF { return nil }
+			if err!=nil { return err }
+			err = msgpackx.Unmarshal(val,t.rec[1:]...)
+			if err!=nil { return err }
+			for i,j := range tu.UpdCols {
+				err = util.SetInPtr(t.rec[j],tu.UpdVals[i])
+				if err!=nil { return err }
+			}
+			for i := range t.buf {
+				t.buf[i] = util.GetPtr(t.rec[i+1])
+			}
+			val,err = msgpackx.Marshal(t.buf)
+			if err!=nil { return err }
+			p.op = bolt.VisitOpSET(val)
+			err = t.cur.Accept(p,true)
+			if err!=nil { return err }
+		}
+	case table.T_Delete:
+		p.op = bolt.VisitOpDELETE()
+		for {
+			_,_,err := t.next()
+			if err==io.EOF { return nil }
+			if err!=nil { return err }
+			err = t.cur.Accept(p,true)
+			if err!=nil { return err }
+		}
+	default:
+		return fmt.Errorf("Illegal op %v",tu.Op)
+	}
+	
+	panic("unreachable")
+}
+
+type tableC struct {
+	bolt.VisitorDefault
+	op  table.TableOp
+	tx  *bolt.Tx
+	bkt *bolt.Bucket
+	rec,orig []interface{}
+	buf []interface{}
+	active bool
+	err error
+	updCols []int
+	updVals []interface{}
+}
+
+func (t *tableC) encode() ([]byte,error) {
+	for i := range t.buf {
+		t.buf[i] = util.GetPtr(t.rec[i+1])
+	}
+	return msgpackx.Marshal(t.buf)
+}
+func (t *tableC) errOp(err error) (op bolt.VisitOp) {
+	t.err = err
+	return
+}
+func (t *tableC) VisitEmpty(key []byte) (op bolt.VisitOp) {
+	val,err := t.encode()
+	if err!=nil { return t.errOp(err) }
+	return bolt.VisitOpSET(val)
+}
+func (t *tableC) VisitFull(key, value []byte) bolt.VisitOp {
+	switch t.op {
+	case table.T_Insert:
+		if len(t.updCols)!=0 { goto upd }
+		t.err = table.ErrDuplicateKey
+		fallthrough
+	case table.T_InsertIgnore: return bolt.VisitOp{}
+	case table.T_Replace:
+		return t.VisitEmpty(key)
+	}
+	upd:
+	err := msgpackx.Unmarshal(value,t.buf[1:])
+	if err!=nil { return t.errOp(err) }
+	for i,j := range t.updCols {
+		err = util.SetInPtr(t.rec[j],t.updVals[i])
+		if err!=nil { return t.errOp(err) }
+	}
+	return t.VisitEmpty(key)
+}
+
+func (t *tableC) discard() {
+	if t.active { return }
+	t.Abort()
+}
+func (t *tableC) Close() error {
+	err := t.tx.Commit()
+	t.tx = nil
+	return err
+}
+func (t *tableC) Abort() error {
+	err := t.tx.Rollback()
+	t.tx = nil
+	return err
+}
+func (t *tableC) TableInsert(ti *table.TableInsert) (err error) {
+	var key []byte
+	for _,value := range ti.Values {
+		for i,p := range t.rec { util.SetInPtr(p,t.orig[i]) }
+		if ti.AllCols {
+			for i,p := range t.rec {
+				err = util.SetInPtr(p,value[i])
+				if err!=nil { return }
+			}
+		} else {
+			for i,j := range ti.Cols {
+				err = util.SetInPtr(t.rec[j],value[i])
+				if err!=nil { return }
+			}
+		}
+		key,err = util.GetKey(t.rec[0])
+		if err!=nil { return }
+		err = t.bkt.Accept(key,t,true)
+		if err!=nil { return }
+		if t.err!=nil { return t.err }
+	}
+	return
 }
 
 
@@ -105,11 +252,65 @@ func (db *DBTable) iter() (*tableI,error) {
 	tbl.active = true
 	return tbl,nil
 }
+func (db *DBTable) modify() (*tableM,error) {
+	tx,err := db.DB.Begin(true)
+	if err!=nil { return nil,err }
+	tbl := &tableM{tableI{tx:tx},nil}
+	defer tbl.discard()
+	bkt,err := tx.CreateBucketIfNotExists(db.Bucket)
+	if err!=nil { return nil,err }
+	tbl.cur = bkt.Cursor()
+	tbl.rec = make([]interface{},len(db.Types))
+	tbl.buf = make([]interface{},len(db.Types)-1)
+	for i,t := range db.Types {
+		v := reflect.New(t)
+		tbl.rec[i] = v.Interface()
+	}
+	tbl.active = true
+	return tbl,nil
+}
+func (db *DBTable) creator() (*tableC,error) {
+	tx,err := db.DB.Begin(true)
+	if err!=nil { return nil,err }
+	tbl := &tableC{tx:tx}
+	defer tbl.discard()
+	bkt,err := tx.CreateBucketIfNotExists(db.Bucket)
+	if err!=nil { return nil,err }
+	tbl.bkt = bkt
+	tbl.rec = make([]interface{},len(db.Types))
+	tbl.orig = make([]interface{},len(db.Types))
+	tbl.buf = make([]interface{},len(db.Types)-1)
+	for i,t := range db.Types {
+		v := reflect.New(t)
+		tbl.rec[i] = v.Interface()
+		tbl.orig[i] = v.Elem().Interface()
+	}
+	tbl.active = true
+	return tbl,nil
+}
 func (db *DBTable) TableScan(cols []int,meta *table.TableScan) (table.TableIterator,error) {
 	ti,err := db.iter()
 	if err!=nil { return nil,err }
 	defer ti.discard()
 	ti.active = false
+	_,err = db.tableScan(ti,cols,meta)
+	if err!=nil { return nil,err }
+	ti.active = true
+	return ti,nil
+}
+func (db *DBTable) TablePrepareUpdate(tu *table.TableUpdate) (table.TableUpdateStmt,error) {
+	for _,j := range tu.UpdCols { if j==0 { return nil,fmt.Errorf("Trying to update the primary key") } }
+	ti,err := db.modify()
+	if err!=nil { return nil,err }
+	defer ti.discard()
+	ti.active = false
+	_,err = db.tableScan(&(ti.tableI),nil,tu.Scan)
+	if err!=nil { return nil,err }
+	ti.active = true
+	return ti,nil
+}
+
+func (db *DBTable) tableScan(ti *tableI,cols []int,meta *table.TableScan) (*int,error) {
 	
 	var op string
 	var key []byte
@@ -149,9 +350,24 @@ func (db *DBTable) TableScan(cols []int,meta *table.TableScan) (table.TableItera
 		ti.key,ti.val = ti.cur.First()
 		ti.pick = true
 	}
-	ti.active = true
-	return ti,nil
+	return nil,nil
 }
+
+func (db *DBTable) TablePrepareInsert(ti *table.TableInsert) (table.TableInsertStmt,error) {
+	tc,err := db.creator()
+	if err!=nil { return nil,err }
+	defer tc.discard()
+	if !ti.AllCols {
+		cnt := 0
+		for _,j := range ti.Cols { if j==0 { cnt++ } }
+		if cnt==0 { return nil,fmt.Errorf("Primary key not specified") }
+	}
+	for _,j := range ti.OndupCols { if j==0 { return nil,fmt.Errorf("Trying to update the primary key") } }
+	tc.updCols = ti.OndupCols
+	tc.updVals = ti.OndupVals
+	return tc,nil
+}
+
 
 func (db *DBTable) ADM_create() error{
 	return db.DB.Update(func(tx *bolt.Tx) error {

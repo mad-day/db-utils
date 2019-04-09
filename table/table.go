@@ -164,7 +164,7 @@ type TableUpdateStmt interface {
 type UpdateableTable interface {
 	Table
 	
-	TablePrepareUpdate(tu *TableUpdate) (TableInsertStmt,error)
+	TablePrepareUpdate(tu *TableUpdate) (TableUpdateStmt,error)
 }
 
 type TableOp int
@@ -211,4 +211,6 @@ func (c ScanError) Error() string {
 	if msg=="" { msg = fmt.Sprintf("gen: Code_%02d",int(c.ErrCode)) }
 	return msg+": "+c.Operator+" "+str
 }
+
+var ErrDuplicateKey = fmt.Errorf("Duplicate Key error")
 
