@@ -135,6 +135,7 @@ type TableInsert struct {
 }
 type TableInsertStmt interface {
 	Close() error
+	Abort() error
 	
 	TableInsert(ti *TableInsert) error
 }
@@ -155,6 +156,7 @@ type TableUpdate struct {
 
 type TableUpdateStmt interface {
 	Close() error
+	Abort() error
 	
 	TableUpdate(tu *TableUpdate) error
 }
