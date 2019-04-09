@@ -123,6 +123,20 @@ type TableIterator interface {
 	Next(cols []int,vals []interface{}) error
 }
 
+var ErrUnsupportedResult = fmt.Errorf("not supported result")
+
+type ModifyResult [2]*int64
+func (r *ModifyResult) LastInsertId() (int64, error) {
+	if r==nil { return 0,ErrUnsupportedResult }
+	if r[0]==nil { return 0,ErrUnsupportedResult }
+	return *(r[0]),nil
+}
+func (r *ModifyResult) RowsAffected() (int64, error) {
+	if r==nil { return 0,ErrUnsupportedResult }
+	if r[1]==nil { return 0,ErrUnsupportedResult }
+	return *(r[1]),nil
+}
+
 type TableInsert struct {
 	AllCols bool
 	Cols []int
@@ -137,7 +151,7 @@ type TableInsertStmt interface {
 	Close() error
 	Abort() error
 	
-	TableInsert(ti *TableInsert) error
+	TableInsert(ti *TableInsert) (*ModifyResult,error)
 }
 
 type InsertableTable interface {
@@ -158,7 +172,7 @@ type TableUpdateStmt interface {
 	Close() error
 	Abort() error
 	
-	TableUpdate(tu *TableUpdate) error
+	TableUpdate(tu *TableUpdate) (*ModifyResult,error)
 }
 
 type UpdateableTable interface {

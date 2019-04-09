@@ -100,40 +100,43 @@ func (t *tableM) Abort() error {
 	t.tx = nil
 	return err
 }
-func (t *tableM) TableUpdate(tu *table.TableUpdate) error {
+func (t *tableM) TableUpdate(tu *table.TableUpdate) (*table.ModifyResult,error) {
 	p := new(placer)
+	var cnt int64
 	switch tu.Op {
 	case table.T_Update:
 		for {
 			_,val,err := t.next()
-			if err==io.EOF { return nil }
-			if err!=nil { return err }
+			if err==io.EOF { return &table.ModifyResult{nil,&cnt},nil }
+			if err!=nil { return nil,err }
 			err = msgpackx.Unmarshal(val,t.rec[1:]...)
-			if err!=nil { return err }
+			if err!=nil { return nil,err }
 			for i,j := range tu.UpdCols {
 				err = util.SetInPtr(t.rec[j],tu.UpdVals[i])
-				if err!=nil { return err }
+				if err!=nil { return nil,err }
 			}
 			for i := range t.buf {
 				t.buf[i] = util.GetPtr(t.rec[i+1])
 			}
 			val,err = msgpackx.Marshal(t.buf...)
-			if err!=nil { return err }
+			if err!=nil { return nil,err }
 			p.op = bolt.VisitOpSET(val)
 			err = t.cur.Accept(p,true)
-			if err!=nil { return err }
+			if err!=nil { return nil,err }
+			cnt++
 		}
 	case table.T_Delete:
 		p.op = bolt.VisitOpDELETE()
 		for {
 			_,_,err := t.next()
-			if err==io.EOF { return nil }
-			if err!=nil { return err }
+			if err==io.EOF { return &table.ModifyResult{nil,&cnt},nil }
+			if err!=nil { return nil,err }
 			err = t.cur.Accept(p,true)
-			if err!=nil { return err }
+			if err!=nil { return nil,err }
+			cnt++
 		}
 	default:
-		return fmt.Errorf("Illegal op %v",tu.Op)
+		return nil,fmt.Errorf("Illegal op %v",tu.Op)
 	}
 	
 	panic("unreachable")
@@ -201,8 +204,9 @@ func (t *tableC) Abort() error {
 	t.tx = nil
 	return err
 }
-func (t *tableC) TableInsert(ti *table.TableInsert) (err error) {
+func (t *tableC) TableInsert(ti *table.TableInsert) (tm *table.ModifyResult,err error) {
 	var key []byte
+	var cnt int64
 	for _,value := range ti.Values {
 		for i,p := range t.rec { util.SetInPtr(p,t.orig[i]) }
 		if ti.AllCols {
@@ -219,9 +223,11 @@ func (t *tableC) TableInsert(ti *table.TableInsert) (err error) {
 		key,err = util.GetKey(t.rec[0])
 		if err!=nil { return }
 		err = t.bkt.Accept(key,t,true)
+		cnt++
 		if err!=nil { return }
-		if t.err!=nil { return t.err }
+		if t.err!=nil { return nil,t.err }
 	}
+	tm = &table.ModifyResult{nil,&cnt}
 	return
 }
 
