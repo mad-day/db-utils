@@ -123,6 +123,44 @@ type TableIterator interface {
 	Next(cols []int,vals []interface{}) error
 }
 
+type TableInsert struct {
+	AllCols bool
+	Cols []int
+	
+	Values [][]interface{}
+	Op TableOp
+	
+	OndupCols []int
+	OndupVals []interface{}
+}
+type TableInsertStmt interface {
+	TableInsert(ti *TableInsert) error
+}
+
+type InsertableTable interface {
+	Table
+	
+	TablePrepareInsert(ti *TableInsert) (TableInsertStmt,error)
+}
+
+type TableUpdate struct {
+	Op  TableOp
+	Scan *TableScan
+	
+	UpdCols []int
+	UpdVals []interface{}
+}
+
+type TableUpdateStmt interface {
+	TableUpdate(tu *TableUpdate) error
+}
+
+type UpdateableTable interface {
+	Table
+	
+	TablePrepareUpdate(tu *TableUpdate) (TableInsertStmt,error)
+}
+
 type TableOp int
 const (
 	// Insert Job

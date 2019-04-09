@@ -421,6 +421,7 @@ func (c *compiler) compileDel(s *sqlparser.Delete) {
 	c.addLimit(s.Limit)
 }
 
+/*
 type UpdateDeleteJob struct{
 	Tab table.Table
 	Op  table.TableOp
@@ -429,28 +430,35 @@ type UpdateDeleteJob struct{
 	UpdCols []int
 	UpdVals []interface{}
 }
-func (s *Schema) CompileUpdate(dml *sqlparser.Update) (job *UpdateDeleteJob,err error) {
+*/
+
+// Compiles an update statement.
+func (s *Schema) CompileUpdate(dml *sqlparser.Update) (tab table.Table, job *table.TableUpdate,err error) {
 	defer func() { if r := recover(); r!=nil { err = any2err(r) } }()
 	
 	c := new(compiler)
 	c.s = s
 	c.compileUpd(dml)
 	
-	job.Tab = c.t
+	job = new(table.TableUpdate)
+	tab = c.t
 	job.Op = c.op
 	job.UpdCols = c.updCols
 	job.UpdVals = c.updVals
 	job.Scan = c.scan
 	return
 }
-func (s *Schema) CompileDelete(dml *sqlparser.Delete) (job *UpdateDeleteJob,err error) {
+
+// Compiles an delete statement.
+func (s *Schema) CompileDelete(dml *sqlparser.Delete) (tab table.Table, job *table.TableUpdate,err error) {
 	defer func() { if r := recover(); r!=nil { err = any2err(r) } }()
 	
 	c := new(compiler)
 	c.s = s
 	c.compileDel(dml)
 	
-	job.Tab = c.t
+	job = new(table.TableUpdate)
+	tab = c.t
 	job.Op = c.op
 	job.UpdCols = c.updCols
 	job.UpdVals = c.updVals

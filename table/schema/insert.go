@@ -95,8 +95,10 @@ func (c *insertCompiler) compileInsert(s *Schema,dml *sqlparser.Insert) {
 	}
 }
 
+/*
 type InsertJob struct {
 	Table table.Table
+	
 	AllCols bool
 	Cols []int
 	
@@ -105,13 +107,18 @@ type InsertJob struct {
 	
 	OndupCols []int
 	OndupVals []interface{}
+	
 }
-func (s *Schema) CompileInsert(dml *sqlparser.Insert) (job *InsertJob,err error) {
+*/
+
+// Compiles an insert-statement.
+func (s *Schema) CompileInsert(dml *sqlparser.Insert) (tab table.Table,job *table.TableInsert,err error) {
 	defer func() { if r := recover(); r!=nil { err = any2err(r) } }()
 	c := new(insertCompiler)
 	c.compileInsert(s,dml)
 	
-	job = new(InsertJob)
+	tab = c.t
+	job = new(table.TableInsert)
 	job.AllCols = c.allCols
 	job.Cols = c.cols
 	job.Values = c.values
