@@ -156,7 +156,7 @@ func (t *tableM) TableUpdate(tu *table.TableUpdate) (*table.ModifyResult,error) 
 			if err!=nil { return nil,err }
 			for i,j := range tu.UpdCols {
 				err = util.SetInPtr(t.rec[j],tu.UpdVals[i])
-				if err!=nil { return nil,err }
+				fmt.Println(i,j,err)
 			}
 			for i := range t.buf {
 				t.buf[i] = util.GetPtr(t.rec[i+1])

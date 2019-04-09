@@ -49,6 +49,7 @@ func (s *Setter) Reset() {
 func (s *Setter) Put(val interface{}) {
 	if !s.listArg {
 		*s.ptr = val
+		return
 	}
 	s.arr = append(s.arr,val)
 	*s.ptr = s.arr

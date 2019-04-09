@@ -43,7 +43,12 @@ type tableResultSet struct {
 	cols []int
 	vals []interface{}
 }
-func (t *tableResultSet) Columns() []string { return t.tab.Columns() }
+func (t *tableResultSet) Columns() (s []string) {
+	mk := t.tab.Columns()
+	s = make([]string,len(t.cols))
+	for i,j := range t.cols { s[i] = mk[j] }
+	return s
+}
 func (t *tableResultSet) Close() error { return t.iter.Close() }
 func (t *tableResultSet) Next(dest []driver.Value) error {
 	err := t.iter.Next(t.cols, t.vals )
@@ -108,7 +113,6 @@ type sqlModify struct {
 	abstractModifier
 	sm schema.SetterMap
 }
-//func (s *sqlModify) Close() error { return nil }
 func (s *sqlModify) NumInput() int { return -1 }
 func (s *sqlModify) Exec(args []driver.Value) (driver.Result, error) { return nil,nil }
 func (s *sqlModify) Query(args []driver.Value) (driver.Rows, error) { return nil,fmt.Errorf("unsupported") }
