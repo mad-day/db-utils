@@ -32,6 +32,10 @@ import (
 	"fmt"
 )
 
+type atx int
+func (atx) Commit() error { return nil }
+func (atx) Rollback() error { return nil }
+
 type abstractScanner interface {
 	scan() (driver.Rows,error)
 	lng() int
@@ -173,10 +177,26 @@ func (db *Database) iPrepare(q sqlparser.Statement) (driver.Stmt,error) {
 }
 
 func (db *Database) Close() error { return nil }
-func (db *Database) Begin() (driver.Tx, error) { return nil,nil }
+func (db *Database) Begin() (driver.Tx, error) { return atx(0),nil }
 func (db *Database) Prepare(query string) (driver.Stmt, error) {
 	stmt,err := sqlparser.Parse(query)
 	if err!=nil { return nil,err }
 	return db.iPrepare(stmt)
 }
+func (db *Database) CheckNamedValue(nv *driver.NamedValue) error {
+	if nv.Name=="" { nv.Name = fmt.Sprintf("v%d",nv.Ordinal) }
+	val,err := driver.DefaultParameterConverter.ConvertValue(nv.Value)
+	if err!=nil { return err }
+	nv.Value = val
+	return nil
+}
+
+type DatabaseContext struct {
+	Parent driver.Driver
+	Itself *Database
+}
+func (d *DatabaseContext) Connect(ctx context.Context) (driver.Conn, error) {
+	return d.Itself,nil
+}
+func (d *DatabaseContext) Driver() driver.Driver { return d.Parent }
 
