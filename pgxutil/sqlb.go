@@ -216,3 +216,41 @@ func NewSqlUpdate(table string) SqlUpdate {
 	return &sqlUpdateBuilder{table:table}
 }
 
+type sqlSelectBuilder struct{
+	exprs string
+	table string
+	sqlFilters
+}
+func (s *sqlSelectBuilder) SetExprs(exprs string) { s.exprs = exprs }
+func (s *sqlSelectBuilder) AddExpr(expr string) {
+	if s.exprs!="" { s.exprs += " , " }
+	s.exprs += expr
+}
+func (s sqlSelectBuilder) String() string {
+	b := new(strings.Builder)
+	b.WriteString("SELECT ")
+	b.WriteString(s.exprs)
+	b.WriteString(" FROM ")
+	b.WriteString(EscapeIdentifier(s.table))
+	for i,f := range s.sqlFilters {
+		if i==0 { b.WriteString(" WHERE ") } else { b.WriteString("AND ") }
+		b.WriteString(f.filter.Filter(EscapeIdentifier(f.name)))
+	}
+	return b.String()
+}
+func (s sqlSelectBuilder) PrepareWith(q IQueryable,name string) (*pgx.PreparedStatement, error) {
+	return q.Prepare(name,s.String())
+}
+
+type SqlSelect interface{
+	SetExprs(exprs string)
+	AddExpr(expr string)
+	AddWhere(name string,filter FieldFilter)
+	String() string
+	PrepareWith(q IQueryable,name string) (*pgx.PreparedStatement, error)
+}
+
+func NewSqlSelect(table string) SqlSelect {
+	return &sqlSelectBuilder{table:table}
+}
+
