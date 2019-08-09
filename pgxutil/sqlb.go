@@ -173,6 +173,7 @@ func (f fieldUpdateArraySet) Update(fieldExpr string) string {
 	
 	return fmt.Sprintf(`array_cat( array_append(%s[:%s - 1],%v),%s[%s + 1:])`,fieldExpr,idx,nval,fieldExpr,idx)
 }
+// nval = QueryArg|FieldUpdate
 func FieldUpdateArraySet(idx QueryArg,nval CommonArg) FieldUpdate { return fieldUpdateArraySet{idx,toFieldUpdate(nval)} }
 
 type FieldFilter interface{
