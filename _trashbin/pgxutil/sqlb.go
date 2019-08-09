@@ -34,34 +34,20 @@ func EscapeIdentifier(name string) string {
 	return "\""+strings.Replace(name,"\"","\"\"",-1)+"\""
 }
 
-type CommonArg interface{
-	isCommonArg()
-}
-/*
-type CommonArg_Impl struct{}
-func (CommonArg_Impl) isCommonArg() {}
-var CommonArg_Inst CommonArg = CommonArg_Impl{}
-*/
-
-//
 type QueryArg interface{
-	CommonArg
 	isQueryArg()
 }
 type cQueryArgNum int
 func (c cQueryArgNum) String() string { return fmt.Sprintf("$%d",int(c)) }
-func (c cQueryArgNum) isCommonArg(){}
 func (c cQueryArgNum) isQueryArg(){}
 
 func NewQueryArg(i int) QueryArg { return cQueryArgNum(i) }
 
 type cQueryArgText string
 func (c cQueryArgText) String() string { return "'"+strings.Replace(string(c),"'","''",-1)+"'" }
-func (c cQueryArgText) isCommonArg(){}
 func (c cQueryArgText) isQueryArg(){}
 
 type cQueryArgSrc string
-func (c cQueryArgSrc) isCommonArg(){}
 func (c cQueryArgSrc) isQueryArg(){}
 
 type cQueryArgArray []QueryArg
@@ -75,7 +61,6 @@ func (c cQueryArgArray) String() string {
 	b.WriteString("]")
 	return b.String()
 }
-func (c cQueryArgArray) isCommonArg(){}
 func (c cQueryArgArray) isQueryArg(){}
 
 func NewQueryArgArray(args ...QueryArg) QueryArg { return cQueryArgArray(args) }
@@ -91,7 +76,6 @@ func (c cQueryArgRow) String() string {
 	b.WriteString(")")
 	return b.String()
 }
-func (c cQueryArgRow) isCommonArg(){}
 func (c cQueryArgRow) isQueryArg(){}
 
 func NewQueryArgRow(args ...QueryArg) QueryArg { return cQueryArgRow(args) }
@@ -142,13 +126,7 @@ func NewQueryArgValue(i interface{}) QueryArg {
 }
 
 type FieldUpdate interface{
-	CommonArg
 	Update(fieldExpr string) string
-}
-
-func toFieldUpdate(ca CommonArg) FieldUpdate {
-	if qa,ok := ca.(QueryArg) ; ok { return fieldUpdateSet{qa} }
-	return ca.(FieldUpdate)
 }
 
 
@@ -156,7 +134,6 @@ type fieldUpdateSet struct{
 	arg QueryArg
 }
 func (f fieldUpdateSet) Update(fieldExpr string) string { return fmt.Sprint(f.arg) }
-func (f fieldUpdateSet) isCommonArg(){}
 func FieldUpdateSet(arg QueryArg) FieldUpdate { return fieldUpdateSet{arg} }
 
 
@@ -165,7 +142,6 @@ type fieldUpdateArraySet struct{
 	idx QueryArg
 	nval FieldUpdate
 }
-func (f fieldUpdateArraySet) isCommonArg(){}
 func (f fieldUpdateArraySet) Update(fieldExpr string) string {
 	idx := fmt.Sprint(f.idx)
 	nfield := fmt.Sprintf("%s[%s]",fieldExpr,idx)
@@ -173,23 +149,16 @@ func (f fieldUpdateArraySet) Update(fieldExpr string) string {
 	
 	return fmt.Sprintf(`array_cat( array_append(%s[:%s - 1],%v),%s[%s + 1:])`,fieldExpr,idx,nval,fieldExpr,idx)
 }
-func FieldUpdateArraySet(idx QueryArg,nval CommonArg) FieldUpdate { return fieldUpdateArraySet{idx,toFieldUpdate(nval)} }
+func FieldUpdateArraySet(idx QueryArg,nval FieldUpdate) FieldUpdate { return fieldUpdateArraySet{idx,nval} }
 
 type FieldFilter interface{
-	CommonArg
 	Filter(fieldExpr string) string
-}
-
-func toFieldFilter(ca CommonArg) FieldFilter {
-	if qa,ok := ca.(QueryArg); ok { return fieldFilterOp{"=",qa} }
-	return ca.(FieldFilter)
 }
 
 type fieldFilterOp struct {
 	op string
 	qa QueryArg
 }
-func (f fieldFilterOp) isCommonArg(){}
 func (f fieldFilterOp) Filter(fieldExpr string) string {
 	return fmt.Sprint(fieldExpr,f.op,f.qa)
 }
@@ -205,14 +174,14 @@ type sqlFilter struct {
 	filter FieldFilter
 }
 type sqlFilters []sqlFilter
-func (s *sqlFilters) AddWhere(name string,filter CommonArg) { *s = append(*s,sqlFilter{name,toFieldFilter(filter)}) }
+func (s *sqlFilters) AddWhere(name string,filter FieldFilter) { *s = append(*s,sqlFilter{name,filter}) }
 
 type sqlUpdate struct {
 	name string
 	update FieldUpdate
 }
 type sqlUpdates []sqlUpdate
-func (s *sqlUpdates) AddUpdate(name string,update CommonArg) { *s = append(*s,sqlUpdate{name,toFieldUpdate(update)}) }
+func (s *sqlUpdates) AddUpdate(name string,update FieldUpdate) { *s = append(*s,sqlUpdate{name,update}) }
 
 type sqlUpdateBuilder struct {
 	table string
@@ -237,8 +206,8 @@ func (s sqlUpdateBuilder) PrepareWith(q IQueryable,name string) (*pgx.PreparedSt
 }
 
 type SqlUpdate interface{
-	AddUpdate(name string,update CommonArg) // update = QueryArg|FieldUpdate
-	AddWhere(name string,filter CommonArg) // filter = QueryArg|FieldFilter
+	AddUpdate(name string,update FieldUpdate)
+	AddWhere(name string,filter FieldFilter)
 	String() string
 	PrepareWith(q IQueryable,name string) (*pgx.PreparedStatement, error)
 }
@@ -276,7 +245,7 @@ func (s sqlSelectBuilder) PrepareWith(q IQueryable,name string) (*pgx.PreparedSt
 type SqlSelect interface{
 	SetExprs(exprs string)
 	AddExpr(expr string)
-	AddWhere(name string,filter CommonArg) // filter = QueryArg|FieldFilter
+	AddWhere(name string,filter FieldFilter)
 	String() string
 	PrepareWith(q IQueryable,name string) (*pgx.PreparedStatement, error)
 }
